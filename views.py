@@ -26,6 +26,7 @@ def info():
         return render_template('info.html')
 
 
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if 'username' in session:
@@ -50,6 +51,9 @@ def login():
             return render_template('login.html')
 
         session['username'] = username_form
+        session.pop('adminMode', None)
+        if (szukany_uzytkownik.is_admin()):
+            session['admin'] = True
         login_user(szukany_uzytkownik)
         return redirect(url_for('info'))
     return render_template('login.html')
@@ -72,6 +76,8 @@ def explore():
 @app.route('/logout')
 def logout():
     session.pop('username', None)
+    session.pop('admin', None)
+    session.pop('adminMode', None)
     logout_user()
     return redirect(url_for('info'))
 
@@ -103,7 +109,7 @@ def register():
             new_user = User(username=new_username, password=new_password, email=new_email)
             db.session.add(new_user)
             db.session.commit()
-            return redirect('/login')   #### czy tu RETURN ?
+            return redirect('/login')
 
         except ServerError as err:
             flash(str(err), 'danger')
@@ -215,6 +221,27 @@ def new_record():
         flash("Dana pozycja już istnieje w bazie", 'warning')
         records = Record.query.all()
         return render_template('record-list.html', records=records)
+
+    #pobieranie pozostałych danych
+    genres = api_check['genres']
+    styles = api_check['styles']
+    country = api_check['country']
+    year = api_check['year']
+
+    genresString = ''
+    if (genres is not None):
+        for genre in genres:
+            genresString += str(genre) + ';'
+
+    stylesString = ''
+    if (styles is not None):
+        for style in styles:
+            stylesString += str(style) + ';'
+
+    new_record.genres = genresString
+    new_record.styles = stylesString
+    new_record.country = country
+    new_record.year = year
 
     db.session.add(new_record)
     db.session.commit()
@@ -369,7 +396,7 @@ def user(username):
     u = db.session.query(User.id).filter(User.username == username).scalar()
     reviews = Review.query.filter_by(user_id=user.id)
     albumlist = db.session.query(List).filter(List.user_id == u).all()
-    return render_template("user.html", reviews=reviews, user=user, albumlist=albumlist)
+    return render_template("user.html", posts=reviews, user=user, albumlist=albumlist)
 
 
 @app.route('/user/<username>/list/<int:id>')
@@ -544,7 +571,6 @@ def get_api_data():
                     db.session.add(plyta)
                     db.session.commit()
 
-
     return render_template('api.html', rows=rows)
 
 
@@ -552,3 +578,29 @@ def get_api_data():
 @app.route('/regulations', methods=['GET'])
 def get_regulations():
     return render_template('regulations.html')
+
+
+@app.route('/creators', methods=['GET'])
+def get_creators():
+    return render_template('creators.html')
+
+
+@app.route('/adminOff', methods=['GET'])
+@login_required
+def get_adminOff():
+    session.pop('adminMode', None)
+    return redirect('/records/')
+
+
+@app.route('/adminOn', methods=['GET'])
+@login_required
+def get_adminOn():
+    session['adminMode'] = True
+    return redirect('/records/')
+
+
+@app.route('/publicLists/', methods=['GET'])
+@login_required
+def publicLists():
+    albumlist = db.session.query(List).filter(List.type == 0).all()
+    return render_template("public_list.html", publicLists=albumlist)
